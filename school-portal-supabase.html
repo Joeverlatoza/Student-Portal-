@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Academic Portal</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+:root{--navy:#0f1f3d;--navy2:#16315c;--mut:#64748b;--line:#d5dce6;--bg:#eef2f7;--blue:#2b5cb8}
+body{font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:var(--bg);color:#0f172a;-webkit-font-smoothing:antialiased}
+input,select,textarea{border:1px solid #c3ccd9;border-radius:6px;padding:.55rem .7rem;width:100%;background:#fff;font-size:15px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-offset:0;border-color:var(--blue)}
+button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.btn{background:var(--navy2);color:#fff;padding:.6rem 1.1rem;font-size:14px;font-weight:600;border-radius:6px}
+.btn:hover{background:var(--navy)}
+.btn2{border:1px solid #b4bfce;padding:.5rem .95rem;font-size:14px;background:#fff;border-radius:6px;font-weight:500;color:#0f172a}
+.btn2:hover{background:#f1f5f9}
+.th{background:#e8edf4;text-align:left;padding:.6rem .8rem;font-size:13px;font-weight:600;color:#334155;border-bottom:1px solid #c3ccd9;white-space:nowrap}
+.td{padding:.6rem .8rem;border-bottom:1px solid #e6ebf2;font-size:14px;vertical-align:top}
+tr:last-child .td{border-bottom:0}
+.lbl{display:block;font-size:13px;font-weight:600;margin:.8rem 0 .25rem;color:#334155}
+.box{background:#fff;border:1px solid var(--line);border-radius:8px;padding:1rem;box-shadow:0 1px 2px rgba(15,31,61,.05)}
+.tag{font-size:12px;font-weight:600;padding:.12rem .5rem;border-radius:999px;background:#e8edf4;color:#334155}
+.stat{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy2);border-radius:8px;padding:.9rem 1.1rem}
+.stat-l{font-size:13px;color:var(--mut)}
+.stat-v{font-size:28px;font-weight:700;line-height:1.2;margin-top:.15rem}
+.stat-s{font-size:12px;color:var(--mut);margin-top:.15rem}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:.12rem .5rem;border-radius:999px;background:#e8edf4;color:#334155;white-space:nowrap}
+.chip-red{background:#fde8e8;color:#9b1c1c}
+.chip-amber{background:#fdf0d5;color:#8a5a00}
+.chip-green{background:#dff3e6;color:#17633a}
+.bar{height:6px;background:#e3e9f1;border-radius:3px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--blue)}
+.bar.fail>i{background:#c0392b}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:#e3e9f1;border-radius:8px;padding:3px}
+.seg button{padding:.6rem;font-size:14px;font-weight:600;border-radius:6px;color:#475569}
+.seg button.on{background:#fff;color:var(--navy2);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.navs{display:flex;gap:.25rem;overflow-x:auto;scrollbar-width:none}
+.navs::-webkit-scrollbar{display:none}
+.navs button{white-space:nowrap}
+.row{display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.75rem 0;border-bottom:1px solid #e6ebf2}
+.row:last-child{border-bottom:0;padding-bottom:0}
+.row:first-child{padding-top:0}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50"></div>
+
+<script type="module">
+/* ==================== CONFIGURATION (edit this block once) ==================== */
+const SCHOOL_NAME = "Academic Portal";
+// Supabase: Project Settings > API. Use the Project URL and the anon public key.
+const SUPABASE_URL = "https://bwrlvygpfklzlperygro.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3cmx2eWdwZmtsemxwZXJ5Z3JvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2ODk1NDgsImV4cCI6MjEwNzI2NTU0OH0.S8_gXxZNbbkbP8Wmeo3kB23ZP9b8I7o4OTIoKOj4iNg";
+/* ============================================================================== */
+
+import {createClient} from "https://esm.sh/@supabase/supabase-js@2";
+
+const SQL = `-- Run this whole script once in Supabase > SQL Editor.
+-- Replace teacher@gmail.com with the teacher's Gmail address first.
+
+create table teachers (email text primary key);
+insert into teachers (email) values ('teacher@gmail.com');
+
+create table profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text unique not null,
+  name text not null,
+  role text not null default 'student' check (role in ('student','teacher')),
+  created_at timestamptz default now()
+);
+
+create table subjects (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  description text default '',
+  created_at timestamptz default now()
+);
+
+create table posts (
+  id uuid primary key default gen_random_uuid(),
+  type text not null check (type in ('homework','quiz','reviewer','lesson')),
+  subject_id uuid references subjects(id) on delete set null,
+  title text not null,
+  body text default '',
+  link text default '',
+  due date,
+  questions jsonb,
+  author text,
+  created_at timestamptz default now()
+);
+
+create table grades (
+  subject_id uuid references subjects(id) on delete cascade,
+  student_id uuid references profiles(id) on delete cascade,
+  q1 numeric check (q1 between 0 and 100),
+  q2 numeric check (q2 between 0 and 100),
+  q3 numeric check (q3 between 0 and 100),
+  q4 numeric check (q4 between 0 and 100),
+  primary key (subject_id, student_id)
+);
+
+create table submissions (
+  post_id uuid references posts(id) on delete cascade,
+  student_id uuid references profiles(id) on delete cascade,
+  student_name text,
+  student_email text,
+  text text default '',
+  link text default '',
+  score numeric,
+  total numeric,
+  feedback text default '',
+  submitted_at timestamptz default now(),
+  primary key (post_id, student_id)
+);
+
+-- Helper: is the signed-in user a teacher?
+create or replace function is_teacher() returns boolean
+language sql security definer stable set search_path = public as $$
+  select exists (select 1 from teachers where email = lower(auth.jwt() ->> 'email'))
+$$;
+
+-- Create a profile on first Google sign-in. Only Gmail addresses are allowed.
+create or replace function handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if lower(new.email) not like '%@gmail.com' then
+    raise exception 'Only Gmail accounts can register.';
+  end if;
+  insert into profiles (id, email, name, role)
+  values (
+    new.id,
+    lower(new.email),
+    coalesce(new.raw_user_meta_data ->> 'full_name', new.email),
+    case when exists (select 1 from teachers where email = lower(new.email)) then 'teacher' else 'student' end
+  );
+  return new;
+end $$;
+
+create trigger on_auth_user_created after insert on auth.users
+for each row execute function handle_new_user();
+
+-- Students cannot change scores or feedback on their own submissions.
+create or replace function protect_submission() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_teacher() then
+    new.score := old.score;
+    new.total := old.total;
+    new.feedback := old.feedback;
+  end if;
+  return new;
+end $$;
+
+create trigger protect_submission_scores before update on submissions
+for each row execute function protect_submission();
+
+-- Row level security
+alter table teachers enable row level security;
+alter table profiles enable row level security;
+alter table subjects enable row level security;
+alter table posts enable row level security;
+alter table grades enable row level security;
+alter table submissions enable row level security;
+
+create policy "profiles read" on profiles for select to authenticated
+  using (id = auth.uid() or is_teacher());
+
+create policy "subjects read" on subjects for select to authenticated using (true);
+create policy "subjects teacher write" on subjects for all to authenticated
+  using (is_teacher()) with check (is_teacher());
+
+create policy "posts read" on posts for select to authenticated using (true);
+create policy "posts teacher write" on posts for all to authenticated
+  using (is_teacher()) with check (is_teacher());
+
+create policy "grades read" on grades for select to authenticated
+  using (student_id = auth.uid() or is_teacher());
+create policy "grades teacher write" on grades for all to authenticated
+  using (is_teacher()) with check (is_teacher());
+
+create policy "submissions read" on submissions for select to authenticated
+  using (student_id = auth.uid() or is_teacher());
+create policy "submissions insert" on submissions for insert to authenticated
+  with check (student_id = auth.uid());
+create policy "submissions update" on submissions for update to authenticated
+  using (student_id = auth.uid() or is_teacher())
+  with check (student_id = auth.uid() or is_teacher());
+
+-- Live updates across devices
+alter publication supabase_realtime add table subjects, posts, grades, submissions;
+`;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const S = {user:null, role:null, view:"", subjects:[], posts:[], grades:[], subs:[], users:[], fType:"all", fSub:"all", ledger:"", loginRole:"student", ledgerSec:"all", target:"", pending:null, intent:null, pendingMsg:null};
+const SETUP_NEEDED = SUPABASE_URL.startsWith("PASTE");
+const TYPES = {homework:"Homework", quiz:"Quiz", reviewer:"Study Reviewer", lesson:"Lesson"};
+const sb = SETUP_NEEDED ? null : createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let realtimeOn = false;
+
+function toast(m, bad) {
+  const t = $("toast");
+  t.innerHTML = `<div class="px-4 py-2 text-sm text-white ${bad ? "bg-red-700" : "bg-slate-800"}">${esc(m)}</div>`;
+  setTimeout(() => t.innerHTML = "", 3500);
+}
+const fmtDate = d => d ? new Date(d + "T00:00:00").toLocaleDateString(undefined, {year:"numeric", month:"short", day:"numeric"}) : "No due date";
+const fmtTs = t => t ? new Date(t).toLocaleString() : "";
+const num = v => v === undefined || v === null || v === "" || isNaN(v) ? null : Number(v);
+function avg(g) {
+  if (!g) return null;
+  const v = ["q1","q2","q3","q4"].map(k => num(g[k])).filter(x => x !== null);
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+}
+function standing(a) {
+  if (a === null) return "No grades recorded";
+  if (a >= 90) return "Outstanding";
+  if (a >= 85) return "Very Satisfactory";
+  if (a >= 80) return "Satisfactory";
+  if (a >= 75) return "Fairly Satisfactory";
+  return "Did Not Meet Expectations";
+}
+const f1 = a => a === null ? "-" : a.toFixed(2);
+
+/* ---------- Setup and login screens ---------- */
+function showSetup() {
+  $("app").innerHTML = `<div class="max-w-3xl mx-auto p-6"><div class="box">
+<h1 class="text-xl font-bold">Portal setup required</h1>
+<ol class="list-decimal ml-5 mt-3 text-sm space-y-1">
+<li>Create a project at supabase.com and wait for it to finish provisioning.</li>
+<li>Project Settings > API: copy the Project URL and the anon public key into this file.</li>
+<li>SQL Editor > New query: paste the script below, change the teacher email, and click Run.</li>
+<li>Authentication > Providers > Google: switch it on. Follow the steps shown there to create a Google OAuth client ID and secret, and paste them in. Copy the callback URL it shows.</li>
+<li>In Google Cloud Console, open your OAuth client and add that callback URL under Authorized redirect URIs.</li>
+<li>Host this file at an https address (Netlify Drop is free).</li>
+<li>Authentication > URL Configuration: set Site URL to the hosted address, and add the same address under Redirect URLs.</li>
+</ol>
+<pre class="mt-3 p-3 bg-slate-100 border border-slate-300 text-xs overflow-x-auto">${esc(SQL)}</pre></div></div>`;
+}
+
+function showLogin(msg) {
+  const T = S.loginRole === "teacher";
+  $("app").innerHTML = `<div class="min-h-screen flex items-center justify-center p-4"><div class="w-full max-w-md">
+<div style="background:var(--navy);border-radius:8px 8px 0 0;padding:1.3rem 1.5rem"><div class="text-white text-xl font-bold">${esc(SCHOOL_NAME)}</div><div class="text-sm" style="color:#b9c6dc">Sign in to continue</div></div>
+<div class="box" style="border-radius:0 0 8px 8px;padding:1.4rem">
+<div class="seg mb-4"><button class="${T ? "" : "on"}" onclick="A.setRole('student')">Student</button><button class="${T ? "on" : ""}" onclick="A.setRole('teacher')">Teacher</button></div>
+${msg ? `<div class="mb-3 p-2.5 text-sm bg-red-50 border border-red-300 text-red-800 rounded-md">${esc(msg)}</div>` : ""}
+<p class="text-sm text-slate-600">${T ? "Use the Gmail address registered as a teacher. Create your account once, then sign in." : "Use your Gmail address. New student? Create your account first, then sign in."}</p>
+<label class="lbl">Gmail address</label><input id="em" type="email" autocomplete="email" placeholder="you@gmail.com">
+<label class="lbl">Password (at least 6 characters)</label><div style="position:relative"><input id="pw" type="password" autocomplete="current-password" style="padding-right:2.8rem" onkeydown="if(event.key==='Enter')A.login()">
+<button type="button" id="eye" aria-label="Show password" onclick="A.togglePw()" style="position:absolute;right:0;top:0;height:100%;width:2.8rem;display:flex;align-items:center;justify-content:center;color:#475569">
+<svg id="eyeOn" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+<svg id="eyeOff" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+</button></div>
+<button class="btn w-full mt-5" onclick="A.login()">Sign in as ${T ? "teacher" : "student"}</button>
+<button class="btn2 w-full mt-2" onclick="A.signup()">Create ${T ? "teacher" : "student"} account</button></div></div></div>`;
+}
+
+/* ---------- Auth and data ---------- */
+async function boot() {
+  if (SETUP_NEEDED) return showSetup();
+  sb.auth.onAuthStateChange(async (_event, session) => {
+    if (_event === "TOKEN_REFRESHED") return;
+    if (!session) { S.user = null; const m = S.pendingMsg; S.pendingMsg = null; showLogin(m); return; }
+    const {data: p} = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
+    if (!p) {
+      S.pendingMsg = "This account cannot be used. Only Gmail accounts can register.";
+      await sb.auth.signOut();
+      return;
+    }
+    if (S.intent && S.intent !== p.role) {
+      const want = S.intent;
+      S.intent = null;
+      S.loginRole = want;
+      S.pendingMsg = want === "teacher"
+        ? "This Gmail is not registered as a teacher. Use the Student tab, or ask the school to register your address."
+        : "This is a teacher account. Use the Teacher tab to sign in.";
+      await sb.auth.signOut();
+      return;
+    }
+    S.intent = null;
+    if (!p.full_name || (p.role === "student" && (!p.grade_level || !p.section))) {
+      S.pending = p;
+      showOnboarding();
+      return;
+    }
+    await enter(p);
+  });
+}
+
+async function enter(p) {
+  S.user = {id: p.id, email: p.email, name: p.full_name || p.name, grade: p.grade_level, section: p.section};
+  S.role = p.role;
+  S.view = S.role === "teacher" ? "overview" : "home";
+  await loadAll();
+  if (!realtimeOn) {
+    realtimeOn = true;
+    sb.channel("portal").on("postgres_changes", {event: "*", schema: "public"}, () => loadAll()).subscribe();
+  }
+}
+
+function showOnboarding() {
+  const student = S.pending.role === "student";
+  $("app").innerHTML = `<div class="min-h-screen flex items-center justify-center p-4"><div class="w-full max-w-md">
+<div style="background:var(--navy);border-radius:8px 8px 0 0;padding:1.3rem 1.5rem"><div class="text-white text-xl font-bold">${esc(SCHOOL_NAME)}</div><div class="text-sm" style="color:#b9c6dc">One last step before you continue</div></div>
+<div class="box" style="border-radius:0 0 8px 8px;padding:1.4rem">
+<div class="font-semibold mb-1">${student ? "Tell us about yourself" : "Confirm your name"}</div>
+<p class="text-sm text-slate-600">${student ? "Your teacher uses this to place you in the right section and send you the right lessons and quizzes." : "Students and other teachers will see this name."}</p>
+<label class="lbl">Full name</label><input id="pf" autocomplete="name" placeholder="First name and last name">
+${student ? `<label class="lbl">Grade level</label><select id="pg"><option value="">Select grade level</option>${[7,8,9,10,11,12].map(n => `<option>Grade ${n}</option>`).join("")}</select>
+<label class="lbl">Section</label><input id="ps2" placeholder="Example: Beethoven">` : ""}
+<button class="btn w-full mt-5" onclick="A.saveProfile()">Save and continue</button>
+<button class="btn2 w-full mt-2" onclick="A.logout()">Sign out</button></div></div></div>`;
+}
+
+async function loadAll() {
+  if (!S.user) return;
+  const teacher = S.role === "teacher";
+  const [subj, posts, grades, subs, users] = await Promise.all([
+    sb.from("subjects").select("*").order("name"),
+    sb.from("posts").select("*").order("created_at", {ascending: false}),
+    sb.from("grades").select("*"),
+    sb.from("submissions").select("*"),
+    teacher ? sb.from("profiles").select("id,name,email,role,full_name,grade_level,section").eq("role", "student").order("full_name") : Promise.resolve({data: []})
+  ]);
+  const err = [subj, posts, grades, subs, users].find(r => r.error);
+  if (err) toast("Data error: " + err.error.message, true);
+  S.subjects = subj.data || [];
+  S.posts = posts.data || [];
+  S.grades = grades.data || [];
+  S.subs = subs.data || [];
+  S.users = (users.data || []).map(u => ({...u, name: u.full_name || u.name}));
+  render();
+}
+
+/* ---------- Layout ---------- */
+const NAV = {
+  student: [["home","Dashboard"], ["grades","Academic Record"], ["learn","Learning Center"]],
+  teacher: [["overview","Overview"], ["sections","Sections"], ["subjects","Subjects"], ["publish","Publish Material"], ["materials","Published Materials"], ["ledger","Grade Ledger"], ["subs","Submissions"]]
+};
+
+function render(force) {
+  if (!S.user) return;
+  const a = document.activeElement;
+  if (!force && a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && $("main") && $("main").contains(a)) return;
+  if (!force && S.view === "publish" && $("main")) return;
+  const nav = NAV[S.role].map(([k, l]) => `<button onclick="A.go('${k}')" class="px-4 py-3 text-sm font-semibold border-b-2 ${S.view === k ? "border-white text-white" : "border-transparent text-slate-300 hover:text-white"}">${l}</button>`).join("");
+  const views = {home: vHome, grades: vGrades, learn: vLearn, overview: vOverview, sections: vSections, subjects: vSubjects, publish: vPublish, materials: vMaterials, ledger: vLedger, subs: vSubs};
+  const initial = (firstName()[0] || "?").toUpperCase();
+  $("app").innerHTML = `<header class="text-white" style="background:var(--navy)"><div class="max-w-6xl mx-auto px-4">
+<div class="flex items-center justify-between py-3"><div class="font-bold text-lg">${esc(SCHOOL_NAME)}</div><button class="btn2" onclick="A.logout()">Sign out</button></div>
+<div class="flex items-center gap-3 pb-3"><div class="flex items-center justify-center font-bold shrink-0" style="width:38px;height:38px;border-radius:50%;background:var(--blue)">${esc(initial)}</div>
+<div class="min-w-0"><div class="font-semibold leading-tight truncate">${esc(S.user.name !== S.user.email ? S.user.name : firstName())}</div><div class="text-xs truncate" style="color:#b9c6dc">${S.role === "teacher" ? "Teacher" : "Student" + (S.user.grade ? " | " + esc(S.user.grade + " - " + S.user.section) : "")} | ${esc(S.user.email)}</div></div></div>
+<nav class="navs">${nav}</nav></div></header>
+<main id="main" class="max-w-6xl mx-auto p-4 pb-10">${views[S.view]()}</main>`;
+}
+
+const subName = id => (S.subjects.find(s => s.id === id) || {}).name || "Unknown subject";
+const mySub = pid => S.subs.find(s => s.post_id === pid && s.student_id === S.user.id);
+const gradeOf = (sid, uid) => S.grades.find(g => g.subject_id === sid && g.student_id === uid);
+const h2 = t => `<h2 class="text-lg font-bold mb-3">${t}</h2>`;
+const empty = t => `<div class="box text-sm text-slate-600">${t}</div>`;
+
+/* ---------- Student views ---------- */
+function firstName() {
+  const n = (S.user.name || "").trim();
+  return n && !n.includes("@") ? n.split(" ")[0] : S.user.email.split("@")[0];
+}
+function dueBadge(d) {
+  if (!d) return `<span class="chip">No due date</span>`;
+  const days = Math.round((new Date(d + "T00:00:00") - new Date(new Date().toDateString())) / 864e5);
+  if (days < 0) return `<span class="chip chip-red">Overdue, ${fmtDate(d)}</span>`;
+  if (days <= 2) return `<span class="chip chip-amber">Due ${days === 0 ? "today" : days === 1 ? "tomorrow" : "in 2 days"}</span>`;
+  return `<span class="chip">${fmtDate(d)}</span>`;
+}
+const stat = (l, v, sub, tone) => `<div class="stat"><div class="stat-l">${l}</div><div class="stat-v ${tone || ""}">${v}</div><div class="stat-s">${sub || ""}</div></div>`;
+const today = () => new Date().toLocaleDateString(undefined, {weekday:"long", month:"long", day:"numeric"});
+
+function vHome() {
+  const subs = S.subjects.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const open = S.posts.filter(p => (p.type === "homework" || p.type === "quiz") && !mySub(p.id)).sort((a, b) => (a.due || "9").localeCompare(b.due || "9"));
+  const avgs = subs.map(s => avg(gradeOf(s.id, S.user.id))).filter(x => x !== null);
+  const ga = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : null;
+  const tone = ga === null ? "text-slate-400" : ga >= 75 ? "text-emerald-700" : "text-red-700";
+  const learn = S.posts.filter(p => p.type === "lesson" || p.type === "reviewer").slice(0, 5);
+  const overdue = open.filter(p => p.due && new Date(p.due + "T00:00:00") < new Date(new Date().toDateString())).length;
+  return `<div class="mb-5"><div class="text-2xl font-bold">Welcome back, ${esc(firstName())}</div><div class="text-sm text-slate-600">${today()}</div></div>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+${stat("General average", f1(ga), standing(ga), tone)}
+${stat("Subjects", subs.length, "Enrolled this year")}
+${stat("To do", open.length, overdue ? overdue + " overdue" : "Homework and quizzes", overdue ? "text-red-700" : "")}
+${stat("Learning materials", S.posts.filter(p => p.type === "lesson" || p.type === "reviewer").length, "Lessons and reviewers")}</div>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+<div class="lg:col-span-2">
+${h2("Your subjects")}
+${subs.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">${subs.map(s => {
+    const g = gradeOf(s.id, S.user.id), a = avg(g);
+    return `<div class="box"><div class="flex justify-between gap-2"><div class="font-semibold">${esc(s.name)}</div><div class="font-bold ${a === null ? "text-slate-400" : a >= 75 ? "text-emerald-700" : "text-red-700"}">${f1(a)}</div></div>
+<div class="text-sm text-slate-600 mb-3">${esc(s.description || "")}</div>
+<div class="bar ${a !== null && a < 75 ? "fail" : ""}"><i style="width:${a === null ? 0 : Math.min(100, a)}%"></i></div>
+<div class="flex gap-1.5 mt-3 flex-wrap">${["q1","q2","q3","q4"].map((k, i) => `<span class="chip">Q${i + 1}: ${g && num(g[k]) !== null ? g[k] : "-"}</span>`).join("")}</div>
+<div class="flex justify-between items-center mt-3 text-sm"><span class="text-slate-600">${S.posts.filter(p => p.subject_id === s.id).length} materials</span><button class="btn2" onclick="A.openSubject('${s.id}')">View materials</button></div></div>`;
+  }).join("")}</div>` : `<div class="mb-6">${empty("No subjects yet. Your teacher will add them.")}</div>`}
+${h2("Upcoming work")}
+${open.length ? `<div class="box">${open.slice(0, 8).map(p => `<div class="row"><div class="min-w-0"><div class="font-semibold truncate">${esc(p.title)}</div><div class="text-sm text-slate-600">${esc(subName(p.subject_id))} | ${TYPES[p.type]}</div></div><div class="flex items-center gap-2 shrink-0">${dueBadge(p.due)}<button class="btn2" onclick="A.open('${p.id}')">Open</button></div></div>`).join("")}</div>` : empty("You are all caught up. No pending work.")}
+</div>
+<div>
+${h2("Lessons and reviewers")}
+${learn.length ? `<div class="box">${learn.map(p => `<div class="row"><div class="min-w-0"><div class="font-semibold truncate">${esc(p.title)}</div><div class="text-sm text-slate-600">${esc(subName(p.subject_id))}</div></div><div class="flex items-center gap-2 shrink-0"><span class="tag">${TYPES[p.type]}</span><button class="btn2" onclick="A.open('${p.id}')">Open</button></div></div>`).join("")}</div>` : empty("No lessons or reviewers have been posted yet.")}
+</div></div>`;
+}
+
+function vGrades() {
+  const subs = S.subjects.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const avgs = [];
+  const rows = subs.map(s => {
+    const g = gradeOf(s.id, S.user.id), a = avg(g);
+    if (a !== null) avgs.push(a);
+    return `<tr><td class="td font-semibold">${esc(s.name)}</td>${["q1","q2","q3","q4"].map(k => `<td class="td">${g && num(g[k]) !== null ? g[k] : "-"}</td>`).join("")}<td class="td font-semibold">${f1(a)}</td><td class="td">${a === null ? "" : a >= 75 ? "Passed" : "Below passing"}</td></tr>`;
+  }).join("");
+  const ga = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : null;
+  return `${h2("Academic record")}<div class="box p-0 overflow-x-auto"><table class="w-full"><tr><th class="th">Subject</th><th class="th">Quarter 1</th><th class="th">Quarter 2</th><th class="th">Quarter 3</th><th class="th">Quarter 4</th><th class="th">Average</th><th class="th">Remarks</th></tr>${rows || `<tr><td class="td" colspan="7">No subjects yet.</td></tr>`}
+<tr class="bg-slate-50"><td class="td font-bold" colspan="5">General average</td><td class="td font-bold">${f1(ga)}</td><td class="td font-bold">${standing(ga)}</td></tr></table></div>
+<p class="text-xs text-slate-600 mt-2">Passing grade is 75. Grades are entered by your teacher.</p>`;
+}
+
+function vLearn() {
+  const list = S.posts.filter(p => (S.fType === "all" || p.type === S.fType) && (S.fSub === "all" || p.subject_id === S.fSub));
+  return `${h2("Learning center")}<div class="grid grid-cols-2 gap-3 mb-3 max-w-lg">
+<div><label class="lbl">Type</label><select onchange="A.f('fType',this.value)"><option value="all">All types</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${S.fType === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+<div><label class="lbl">Subject</label><select onchange="A.f('fSub',this.value)"><option value="all">All subjects</option>${S.subjects.map(s => `<option value="${s.id}" ${S.fSub === s.id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></div></div>
+${list.length ? `<div class="box p-0 overflow-x-auto"><table class="w-full"><tr><th class="th">Title</th><th class="th">Type</th><th class="th">Subject</th><th class="th">Due</th><th class="th">Status</th><th class="th"></th></tr>${list.map(p => {
+    const s = mySub(p.id), gradable = p.type === "homework" || p.type === "quiz";
+    const status = !gradable ? "Available" : s ? (s.score != null ? "Scored " + s.score + " of " + s.total : "Submitted") : "Not submitted";
+    return `<tr><td class="td">${esc(p.title)}</td><td class="td"><span class="tag">${TYPES[p.type]}</span></td><td class="td">${esc(subName(p.subject_id))}</td><td class="td">${gradable ? fmtDate(p.due) : "-"}</td><td class="td">${status}</td><td class="td"><button class="btn2" onclick="A.open('${p.id}')">Open</button></td></tr>`;
+  }).join("")}</table></div>` : empty("No materials match the selected filters.")}`;
+}
+
+/* ---------- Teacher views ---------- */
+function vOverview() {
+  const toScore = S.subs.filter(s => { const p = S.posts.find(x => x.id === s.post_id); return p && p.type === "homework" && s.score == null; });
+  const recent = S.posts.slice(0, 6);
+  return `<div class="mb-5"><div class="text-2xl font-bold">Welcome, ${esc(firstName())}</div><div class="text-sm text-slate-600">${today()}</div></div>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+${stat("Students", S.users.length, "Signed in at least once")}
+${stat("Subjects", S.subjects.length, "Created")}
+${stat("Published materials", S.posts.length, "Homework, quizzes, lessons")}
+${stat("Awaiting score", toScore.length, "Homework submissions", toScore.length ? "text-amber-700" : "")}</div>
+<div class="flex flex-wrap gap-2 mb-6"><button class="btn" onclick="A.go('publish')">Publish material</button><button class="btn2" onclick="A.go('subjects')">Add subject</button><button class="btn2" onclick="A.go('ledger')">Open grade ledger</button></div>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+<div class="lg:col-span-2">${h2("Submissions to score")}
+${toScore.length ? `<div class="box">${toScore.slice(0, 8).map(s => { const p = S.posts.find(x => x.id === s.post_id) || {}; return `<div class="row"><div class="min-w-0"><div class="font-semibold truncate">${esc(s.student_name)}</div><div class="text-sm text-slate-600 truncate">${esc(p.title || "")} | ${fmtTs(s.submitted_at)}</div></div><button class="btn2 shrink-0" onclick="A.go('subs')">Score</button></div>`; }).join("")}</div>` : empty("No submissions are waiting for a score.")}</div>
+<div>${h2("Recently published")}
+${recent.length ? `<div class="box">${recent.map(p => `<div class="row"><div class="min-w-0"><div class="font-semibold truncate">${esc(p.title)}</div><div class="text-sm text-slate-600 truncate">${esc(subName(p.subject_id))}</div></div><span class="tag shrink-0">${TYPES[p.type]}</span></div>`).join("")}</div>` : empty("Nothing published yet.")}</div></div>`;
+}
+
+function sectionList() {
+  const m = new Map();
+  S.users.filter(u => u.grade_level && u.section).forEach(u => {
+    const k = u.grade_level + "||" + u.section.trim().toLowerCase();
+    if (!m.has(k)) m.set(k, {grade: u.grade_level, section: u.section.trim(), key: k, students: []});
+    m.get(k).students.push(u);
+  });
+  return [...m.values()].sort((a, b) => a.grade.localeCompare(b.grade, undefined, {numeric: true}) || a.section.localeCompare(b.section));
+}
+const postsFor = sec => S.posts.filter(p => p.grade_level === sec.grade && (p.section || "").toLowerCase() === sec.section.toLowerCase()).length;
+
+function vSections() {
+  const secs = sectionList();
+  const incomplete = S.users.filter(u => !u.grade_level || !u.section);
+  return `${h2("Sections")}
+${secs.length ? `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${secs.map(sec => `<div class="box">
+<div class="font-bold text-lg">${esc(sec.grade)} - ${esc(sec.section)}</div>
+<div class="text-sm text-slate-600">${sec.students.length} student${sec.students.length === 1 ? "" : "s"} | ${postsFor(sec)} item${postsFor(sec) === 1 ? "" : "s"} sent to this section</div>
+<div class="mt-3">${sec.students.map(u => `<div class="row" style="padding:.45rem 0"><span class="text-sm">${esc(u.name)}</span><span class="text-xs text-slate-500 truncate">${esc(u.email)}</span></div>`).join("")}</div>
+<div class="flex gap-2 mt-4 flex-wrap"><button class="btn" data-v="${esc(sec.key)}" onclick="A.toSection(this.dataset.v)">Upload lesson or quiz</button><button class="btn2" data-v="${esc(sec.key)}" onclick="A.gradeSection(this.dataset.v)">Enter grades</button></div></div>`).join("")}</div>` : empty("No sections yet. A section appears here after a student creates an account and enters their grade level and section.")}
+${incomplete.length ? `<div class="mt-6">${h2("Profile not completed")}<div class="box">${incomplete.map(u => `<div class="row"><span class="text-sm">${esc(u.name)}</span><span class="text-xs text-slate-500">${esc(u.email)}</span></div>`).join("")}</div></div>` : ""}`;
+}
+
+function vSubjects() {
+  return `${h2("Subjects")}<div class="box mb-4 max-w-xl"><label class="lbl !mt-0">Subject name</label><input id="sn" placeholder="General Mathematics"><label class="lbl">Description</label><input id="sd" placeholder="Optional short description"><button class="btn mt-3" onclick="A.addSubject()">Add subject</button></div>
+${S.subjects.length ? `<div class="box p-0 overflow-x-auto"><table class="w-full"><tr><th class="th">Subject</th><th class="th">Description</th><th class="th">Materials</th><th class="th"></th></tr>${S.subjects.map(s => `<tr><td class="td font-semibold">${esc(s.name)}</td><td class="td">${esc(s.description || "")}</td><td class="td">${S.posts.filter(p => p.subject_id === s.id).length}</td><td class="td"><button class="btn2" onclick="A.delSubject('${s.id}')">Delete</button></td></tr>`).join("")}</table></div>` : empty("No subjects yet. Add the first subject above.")}`;
+}
+
+function qBlock() {
+  return `<div class="qb border border-slate-300 p-3 mt-3 bg-slate-50"><label class="lbl !mt-0">Question</label><input class="qt"><div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">${"ABCD".split("").map(l => `<input class="qo" placeholder="Option ${l}">`).join("")}</div><div class="grid grid-cols-2 gap-2 mt-2"><div><label class="lbl !mt-0">Correct option</label><select class="qc"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></div><div><label class="lbl !mt-0">Points</label><input class="qp" type="number" min="1" value="1"></div></div><button class="btn2 mt-2" onclick="this.closest('.qb').remove()">Remove question</button></div>`;
+}
+
+function vPublish() {
+  return `${h2("Publish material")}<div class="box max-w-2xl">
+<label class="lbl !mt-0">Type</label><select id="pt" onchange="A.typeChange()">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+<label class="lbl">Subject</label><select id="ps">${S.subjects.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select>
+<label class="lbl">Send to</label><select id="ptarget"><option value="">All students</option>${sectionList().map(sec => `<option value="${esc(sec.key)}" ${S.target === sec.key ? "selected" : ""}>${esc(sec.grade)} - ${esc(sec.section)}</option>`).join("")}</select>
+<label class="lbl">Title</label><input id="ptitle">
+<div id="dueW"><label class="lbl">Due date</label><input id="pdue" type="date"></div>
+<label class="lbl" id="bodyL">Instructions</label><textarea id="pbody" rows="5"></textarea>
+<div id="linkW"><label class="lbl">Resource link (optional, for example a Google Drive share link)</label><input id="plink" placeholder="https://"></div>
+<div id="quizW" class="hidden"><div id="qs">${qBlock()}</div><button class="btn2 mt-3" onclick="document.getElementById('qs').insertAdjacentHTML('beforeend',A.qBlock())">Add question</button></div>
+<button class="btn mt-4" onclick="A.publish()">Publish</button></div>`;
+}
+
+function vMaterials() {
+  return `${h2("Published materials")}${S.posts.length ? `<div class="box p-0 overflow-x-auto"><table class="w-full"><tr><th class="th">Title</th><th class="th">Type</th><th class="th">Subject</th><th class="th">For</th><th class="th">Due</th><th class="th">Published</th><th class="th"></th></tr>${S.posts.map(p => `<tr><td class="td">${esc(p.title)}</td><td class="td">${TYPES[p.type]}</td><td class="td">${esc(subName(p.subject_id))}</td><td class="td">${p.grade_level ? esc(p.grade_level + " - " + p.section) : "All students"}</td><td class="td">${p.type === "homework" || p.type === "quiz" ? fmtDate(p.due) : "-"}</td><td class="td">${fmtTs(p.created_at)}</td><td class="td"><button class="btn2" onclick="A.delPost('${p.id}')">Delete</button></td></tr>`).join("")}</table></div>` : empty("Nothing published yet.")}`;
+}
+
+function vLedger() {
+  const sid = S.ledger && S.subjects.some(s => s.id === S.ledger) ? S.ledger : (S.subjects[0] || {}).id || "";
+  const secs = sectionList();
+  const studs = S.ledgerSec === "all" ? S.users : S.users.filter(u => u.grade_level && u.section && (u.grade_level + "||" + u.section.trim().toLowerCase()) === S.ledgerSec);
+  const head = `${h2("Grade ledger")}<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl mb-3">
+<div><label class="lbl !mt-0">Subject</label><select onchange="A.f('ledger',this.value)">${S.subjects.map(s => `<option value="${s.id}" ${s.id === sid ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></div>
+<div><label class="lbl !mt-0">Section</label><select onchange="A.f('ledgerSec',this.value)"><option value="all">All sections</option>${secs.map(sec => `<option value="${esc(sec.key)}" ${S.ledgerSec === sec.key ? "selected" : ""}>${esc(sec.grade)} - ${esc(sec.section)}</option>`).join("")}</select></div></div>`;
+  if (!S.subjects.length) return head + empty("Create a subject first.");
+  if (!studs.length) return head + empty("No students in this section yet.");
+  return head + `<div class="box p-0 overflow-x-auto"><table class="w-full"><tr><th class="th">Student</th><th class="th">Quarter 1</th><th class="th">Quarter 2</th><th class="th">Quarter 3</th><th class="th">Quarter 4</th><th class="th">Average</th><th class="th"></th></tr>${studs.map(u => {
+    const g = gradeOf(sid, u.id) || {};
+    return `<tr data-uid="${u.id}"><td class="td"><div class="font-semibold">${esc(u.name)}</div><div class="text-xs text-slate-600">${u.grade_level ? esc(u.grade_level + " - " + u.section) + " | " : ""}${esc(u.email)}</div></td>${["q1","q2","q3","q4"].map(k => `<td class="td"><input data-k="${k}" type="number" min="0" max="100" step="0.01" value="${g[k] ?? ""}" style="width:90px"></td>`).join("")}<td class="td font-semibold">${f1(avg(g))}</td><td class="td"><button class="btn" onclick="A.saveGrade(this,'${sid}')">Save</button></td></tr>`;
+  }).join("")}</table></div>`;
+}
+
+function vSubs() {
+  const l = S.subs.slice().sort((a, b) => (b.submitted_at || "").localeCompare(a.submitted_at || ""));
+  return `${h2("Student submissions")}${l.length ? `<div class="box p-0 overflow-x-auto"><table class="w-full"><tr><th class="th">Student</th><th class="th">Material</th><th class="th">Submitted</th><th class="th">Response</th><th class="th">Score and feedback</th></tr>${l.map(s => {
+    const p = S.posts.find(x => x.id === s.post_id) || {};
+    const quiz = p.type === "quiz";
+    return `<tr><td class="td">${esc(s.student_name)}<div class="text-xs text-slate-600">${esc(s.student_email)}</div></td><td class="td">${esc(p.title || "Removed")}<div class="text-xs text-slate-600">${TYPES[p.type] || ""}</div></td><td class="td">${fmtTs(s.submitted_at)}</td><td class="td" style="max-width:260px">${quiz ? "Auto-graded quiz" : `<div class="whitespace-pre-wrap">${esc(s.text || "")}</div>${s.link ? `<a class="text-blue-800 underline break-all" target="_blank" rel="noopener" href="${esc(s.link)}">${esc(s.link)}</a>` : ""}`}</td><td class="td">${quiz ? `Score ${s.score} of ${s.total}` : `<div id="g_${s.post_id}_${s.student_id}"><input data-s type="number" min="0" placeholder="Score" value="${s.score ?? ""}" style="width:100px"><input data-f class="mt-1" placeholder="Feedback" value="${esc(s.feedback || "")}"><button class="btn mt-1" onclick="A.gradeSub('${s.post_id}','${s.student_id}')">Save</button></div>`}</td></tr>`;
+  }).join("")}</table></div>` : empty("No submissions yet.")}`;
+}
+
+/* ---------- Actions ---------- */
+const A = window.A = {
+  qBlock,
+  togglePw() {
+    const i = $("pw"), show = i.type === "password";
+    i.type = show ? "text" : "password";
+    $("eyeOn").classList.toggle("hidden", show);
+    $("eyeOff").classList.toggle("hidden", !show);
+    $("eye").setAttribute("aria-label", show ? "Hide password" : "Show password");
+  },
+  toSection(v) { S.target = v; S.view = "publish"; render(true); },
+  gradeSection(v) { S.ledgerSec = v; S.view = "ledger"; render(true); },
+  async saveProfile() {
+    const p = S.pending, student = p.role === "student";
+    const full = $("pf").value.trim().replace(/\s+/g, " ");
+    const grade = student ? $("pg").value : null;
+    const sec = student ? $("ps2").value.trim().replace(/\s+/g, " ") : null;
+    if (full.split(" ").length < 2) return toast("Enter your full name, first and last name.", true);
+    if (student && !grade) return toast("Select your grade level.", true);
+    if (student && !sec) return toast("Enter your section.", true);
+    const {error} = await sb.from("profiles").update({full_name: full, grade_level: grade, section: sec}).eq("id", p.id);
+    if (error) return toast("Could not save: " + error.message, true);
+    await enter({...p, full_name: full, grade_level: grade, section: sec});
+  },
+  setRole(r) {
+    const e = $("em") ? $("em").value : "";
+    S.loginRole = r;
+    showLogin();
+    if (e) $("em").value = e;
+  },
+  async login() {
+    const email = $("em").value.trim().toLowerCase(), password = $("pw").value;
+    if (!email || !password) return toast("Enter your email and password.", true);
+    S.intent = S.loginRole;
+    const {error} = await sb.auth.signInWithPassword({email, password});
+    if (error) S.intent = null;
+    if (error) toast(error.message === "Invalid login credentials" ? "Wrong email or password, or the account does not exist yet." : error.message, true);
+  },
+  async signup() {
+    const email = $("em").value.trim().toLowerCase(), password = $("pw").value;
+    if (!email.endsWith("@gmail.com")) return toast("Use a Gmail address (ending in @gmail.com).", true);
+    if (password.length < 6) return toast("Password must be at least 6 characters.", true);
+    S.intent = S.loginRole;
+    const {data, error} = await sb.auth.signUp({email, password});
+    if (error) { S.intent = null; return toast(error.message, true); }
+    if (!data.session) toast("Account created, but Supabase still requires email confirmation. Turn off Confirm email in Supabase, then sign in.", true);
+  },
+  async logout() { await sb.auth.signOut(); },
+  go(v) { S.view = v; render(true); },
+  f(k, v) { S[k] = v; render(true); },
+  openSubject(id) { S.fSub = id; S.fType = "all"; S.view = "learn"; render(true); },
+  typeChange() {
+    const t = $("pt").value;
+    $("dueW").classList.toggle("hidden", !(t === "homework" || t === "quiz"));
+    $("quizW").classList.toggle("hidden", t !== "quiz");
+    $("linkW").classList.toggle("hidden", t === "quiz");
+    $("bodyL").textContent = t === "homework" ? "Instructions" : t === "quiz" ? "Quiz instructions" : t === "reviewer" ? "Summary or reviewer text" : "Lesson notes";
+  },
+  async addSubject() {
+    const name = $("sn").value.trim();
+    if (!name) return toast("Enter a subject name.", true);
+    const {error} = await sb.from("subjects").insert({name, description: $("sd").value.trim()});
+    if (error) return toast(error.message, true);
+    toast("Subject added.");
+  },
+  async delSubject(id) {
+    if (!confirm("Delete this subject? Its grades and materials will be removed.")) return;
+    const {error} = await sb.from("subjects").delete().eq("id", id);
+    if (error) toast(error.message, true);
+  },
+  async publish() {
+    const type = $("pt").value, subject_id = $("ps").value, title = $("ptitle").value.trim(), body = $("pbody").value.trim();
+    if (!subject_id) return toast("Create a subject first.", true);
+    if (!title) return toast("Enter a title.", true);
+    const row = {
+      type, subject_id, title, body,
+      link: type === "quiz" ? "" : $("plink").value.trim(),
+      due: (type === "homework" || type === "quiz") && $("pdue").value ? $("pdue").value : null,
+      author: S.user.email
+    };
+    const tv = $("ptarget").value;
+    if (tv) {
+      const sec = sectionList().find(x => x.key === tv);
+      if (sec) { row.grade_level = sec.grade; row.section = sec.section; }
+    }
+    if (type === "quiz") {
+      row.questions = [...document.querySelectorAll(".qb")].map(b => ({
+        q: b.querySelector(".qt").value.trim(),
+        opts: [...b.querySelectorAll(".qo")].map(i => i.value.trim()),
+        correct: +b.querySelector(".qc").value,
+        points: Math.max(1, +b.querySelector(".qp").value || 1)
+      }));
+      if (!row.questions.length || row.questions.some(q => !q.q || q.opts.some(o => !o)))
+        return toast("Complete every question and all four options.", true);
+    }
+    const {error} = await sb.from("posts").insert(row);
+    if (error) return toast(error.message, true);
+    toast("Published.");
+    S.view = "materials";
+    render(true);
+  },
+  async delPost(id) {
+    if (!confirm("Delete this material?")) return;
+    const {error} = await sb.from("posts").delete().eq("id", id);
+    if (error) toast(error.message, true);
+  },
+  async saveGrade(btn, sid) {
+    const tr = btn.closest("tr"), uid = tr.dataset.uid, row = {subject_id: sid, student_id: uid};
+    for (const i of tr.querySelectorAll("input")) {
+      const v = i.value.trim();
+      if (v !== "" && (isNaN(v) || v < 0 || v > 100)) return toast("Grades must be between 0 and 100.", true);
+      row[i.dataset.k] = v === "" ? null : Number(v);
+    }
+    const {error} = await sb.from("grades").upsert(row, {onConflict: "subject_id,student_id"});
+    if (error) return toast(error.message, true);
+    toast("Grades saved.");
+  },
+  async gradeSub(pid, uid) {
+    const w = $(`g_${pid}_${uid}`), s = w.querySelector("[data-s]").value;
+    const {error} = await sb.from("submissions").update({
+      score: s === "" ? null : Number(s),
+      feedback: w.querySelector("[data-f]").value.trim()
+    }).eq("post_id", pid).eq("student_id", uid);
+    if (error) return toast(error.message, true);
+    toast("Score saved.");
+  },
+  open(id) {
+    const p = S.posts.find(x => x.id === id);
+    if (!p) return;
+    const s = mySub(id), gr = p.type === "homework" || p.type === "quiz";
+    let b = `<div class="text-sm text-slate-600 mb-2">${TYPES[p.type]} | ${esc(subName(p.subject_id))}${gr ? " | Due: " + fmtDate(p.due) : ""}</div>`;
+    if (p.body) b += `<div class="whitespace-pre-wrap text-sm mb-3">${esc(p.body)}</div>`;
+    if (p.link) b += `<a class="text-blue-800 underline text-sm break-all" target="_blank" rel="noopener" href="${esc(p.link)}">Open resource</a>`;
+    if (p.type === "homework") {
+      b += `<label class="lbl">Your response</label><textarea id="st" rows="5">${esc(s?.text || "")}</textarea><label class="lbl">Link to your file (optional)</label><input id="sl" value="${esc(s?.link || "")}" placeholder="https://">
+${s ? `<div class="text-sm mt-2">Submitted ${fmtTs(s.submitted_at)}${s.score != null ? ". Score: <b>" + s.score + "</b>" : ""}${s.feedback ? "<br>Feedback: " + esc(s.feedback) : ""}</div>` : ""}
+<button class="btn mt-3" onclick="A.submitHw('${id}')">${s ? "Update submission" : "Submit homework"}</button>`;
+    }
+    if (p.type === "quiz") {
+      const tot = p.questions.reduce((a, q) => a + q.points, 0);
+      if (s) b += `<div class="box mt-3"><b>Score: ${s.score} of ${s.total}</b><div class="text-sm">Submitted ${fmtTs(s.submitted_at)}. Each quiz can be taken once.</div></div>`;
+      else b += p.questions.map((q, i) => `<div class="border border-slate-300 p-3 mt-3"><div class="font-semibold text-sm">${i + 1}. ${esc(q.q)} (${q.points} pt${q.points > 1 ? "s" : ""})</div>${q.opts.map((o, j) => `<label class="flex gap-2 items-start text-sm mt-1"><input type="radio" name="q${i}" value="${j}" style="width:auto;margin-top:3px">${esc(o)}</label>`).join("")}</div>`).join("") + `<div class="text-sm mt-2">Total points: ${tot}</div><button class="btn mt-3" onclick="A.submitQuiz('${id}')">Submit quiz</button>`;
+    }
+    $("modal").innerHTML = `<div class="fixed inset-0 bg-slate-900/60 z-40 flex items-start justify-center overflow-y-auto p-4"><div class="bg-white border border-slate-400 w-full max-w-2xl p-5 mt-6"><div class="flex justify-between items-start gap-3 mb-2"><h3 class="text-lg font-bold">${esc(p.title)}</h3><button class="btn2" onclick="A.close()">Close</button></div>${b}</div></div>`;
+  },
+  close() { $("modal").innerHTML = ""; },
+  async submitHw(pid) {
+    const text = $("st").value.trim(), link = $("sl").value.trim();
+    if (!text && !link) return toast("Add a response or a link.", true);
+    const {error} = await sb.from("submissions").upsert({
+      post_id: pid, student_id: S.user.id, student_name: S.user.name, student_email: S.user.email,
+      text, link, submitted_at: new Date().toISOString()
+    }, {onConflict: "post_id,student_id"});
+    if (error) return toast("Submission failed: " + error.message, true);
+    toast("Homework submitted.");
+    A.close();
+  },
+  async submitQuiz(pid) {
+    const p = S.posts.find(x => x.id === pid);
+    let score = 0, total = 0;
+    for (let i = 0; i < p.questions.length; i++) {
+      const r = document.querySelector(`input[name=q${i}]:checked`);
+      if (!r) return toast("Answer every question before submitting.", true);
+      const q = p.questions[i];
+      total += q.points;
+      if (+r.value === q.correct) score += q.points;
+    }
+    const {error} = await sb.from("submissions").insert({
+      post_id: pid, student_id: S.user.id, student_name: S.user.name, student_email: S.user.email,
+      score, total, submitted_at: new Date().toISOString()
+    });
+    if (error) return toast("Submission failed: " + error.message, true);
+    toast("Quiz submitted.");
+    A.close();
+  }
+};
+
+boot();
+</script>
+</body>
+</html>
